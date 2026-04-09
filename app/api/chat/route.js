@@ -1,75 +1,107 @@
-import Groq from 'groq-sdk'
-import OpenAI from 'openai'
-
-const CHAT_SYSTEM = `You are "Coding AI", a friendly senior developer and coding mentor.
+const SYSTEM = `You are "Coding AI", a friendly senior developer and coding mentor.
 
 RESPONSE RULES:
 - Always respond in the same language as the user (Hindi/Hinglish/English)
-- Keep responses concise and clear — not too long
 - For code: always use proper code blocks with language specified
-- Every code block must have a comment explaining what it does
-- After every code block, give a SHORT explanation in 3 parts:
-  🗣️ Hinglish: "Bhai, yahan kya hua..."
-  🇮🇳 Hindi: "यह code..."  
+- After code blocks give SHORT explanation:
+  🗣️ Hinglish: "Bhai, yahan..."
+  🇮🇳 Hindi: "यह code..."
   🌐 English: "This code..."
 - End with ONE prevention tip
+- Keep responses clear and concise
 
-FOR PROJECT/APP IDEAS:
-When user asks to build an app or project, respond with this EXACT JSON format:
+FOR PROJECT/APP IDEAS respond with JSON:
 \`\`\`json
 {
   "type": "project",
   "name": "Project Name",
   "files": [
-    {"path": "index.html", "content": "full file content here", "description": "Main HTML file"},
-    {"path": "style.css", "content": "full css content", "description": "Styles"},
-    {"path": "script.js", "content": "full js content", "description": "Logic"}
+    {"path": "index.html", "content": "...", "description": "Main file"},
+    {"path": "style.css", "content": "...", "description": "Styles"},
+    {"path": "script.js", "content": "...", "description": "Logic"}
   ]
 }
 \`\`\`
 
-FOR BUGS/ERRORS:
+FOR BUGS:
 ## ✅ Fix
 \`\`\`language
 corrected code
 \`\`\`
 **Kya badla:** one line
-
 ## 📖 Samjho
-🗣️ Hinglish | 🇮🇳 Hindi | 🌐 English
+## 🛡️ Prevention`
 
-## 🛡️ Prevention
-One tip`
+const MODELS = {
+  deepseek: 'deepseek/deepseek-r1',
+  llama: 'meta-llama/llama-3.3-70b-instruct',
+  gemini: 'google/gemini-2.0-flash-001',
+}
 
 export async function POST(request) {
   try {
-    const { messages, model = 'groq' } = await request.json()
+    const { messages, model = 'deepseek' } = await request.json()
+    const selectedModel = MODELS[model] || MODELS.deepseek
 
-    if (model === 'openrouter') {
-      const client = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: process.env.OPENROUTER_API_KEY,
-        defaultHeaders: { 'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://code-cure-ai.vercel.app' }
-      })
-      const response = await client.chat.completions.create({
-        model: 'deepseek/deepseek-r1',
-        messages: [{ role: 'system', content: CHAT_SYSTEM }, ...messages],
-        max_tokens: 4096,
-      })
-      return Response.json({ content: response.choices[0].message.content, model: 'DeepSeek' })
-    } else {
-      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
-      const response = await groq.chat.completions.create({
-        model: 'llama3-70b-8192',
-        messages: [{ role: 'system', content: CHAT_SYSTEM }, ...messages],
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://coding-ai.vercel.app',
+        'X-Title': 'Coding AI',
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: 'system', content: SYSTEM }, ...messages],
         max_tokens: 4096,
         temperature: 0.3,
-      })
-      return Response.json({ content: response.choices[0].message.content, model: 'Groq' })
+        stream: true,
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      return Response.json({ error: 'OpenRouter error: ' + err }, { status: 500 })
     }
+
+    // Stream response directly to client
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
+
+          for (const line of lines) {
+            const data = line.replace('data: ', '').trim()
+            if (data === '[DONE]') { controller.close(); return }
+            try {
+              const json = JSON.parse(data)
+              const text = json.choices?.[0]?.delta?.content || ''
+              if (text) controller.enqueue(new TextEncoder().encode(text))
+            } catch {}
+          }
+        }
+        controller.close()
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'X-Content-Type-Options': 'nosniff',
+      }
+    })
+
   } catch (error) {
-    console.error('AI Error:', error)
-    return Response.json({ error: 'AI se jawab nahi aaya: ' + error.message }, { status: 500 })
+    return Response.json({ error: error.message }, { status: 500 })
   }
-    }
+        }
     
