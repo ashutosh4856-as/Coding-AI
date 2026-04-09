@@ -2,7 +2,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn, signUp, supabase } from '@/lib/supabase'
-import { Code2, Lock, Mail, User, ArrowRight, Loader2 } from 'lucide-react'
+import { Code2, Lock, Mail, User, ArrowRight, Loader2, Globe } from 'lucide-react'
+
+const LANGUAGES = [
+  { id: 'hinglish', label: '🇮🇳 Hinglish', desc: 'Hindi + English mix' },
+  { id: 'hindi', label: '🕉️ Hindi', desc: 'Pure Hindi' },
+  { id: 'english', label: '🌐 English', desc: 'Full English' },
+]
 
 export default function AuthPage() {
   const router = useRouter()
@@ -10,11 +16,13 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedLang, setSelectedLang] = useState('hinglish')
   const [form, setForm] = useState({ name: '', email: '', password: '' })
 
   const handleGoogle = async () => {
     setGoogleLoading(true)
     setError('')
+    localStorage.setItem('preferred_language', selectedLang)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/chat` }
@@ -27,6 +35,7 @@ export default function AuthPage() {
     setError('')
     if (!form.email || !form.password) { setError('Email aur password zaroori hai'); return }
     setLoading(true)
+    localStorage.setItem('preferred_language', selectedLang)
     try {
       if (isLogin) {
         const { error } = await signIn(form.email, form.password)
@@ -50,17 +59,39 @@ export default function AuthPage() {
       </div>
 
       <div className="w-full max-w-md relative z-10">
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 mb-4 shadow-2xl shadow-violet-500/30">
             <Code2 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white">Coding AI</h1>
-          <p className="text-slate-400 mt-2">Debug • Fix • Build — तीन भाषाओं में</p>
+          <p className="text-slate-400 mt-2">Debug • Fix • Build</p>
         </div>
 
-        <div className="bg-[#12121a] border border-[#1a1a27] rounded-2xl p-8 shadow-2xl">
+        <div className="bg-[#12121a] border border-[#1a1a27] rounded-2xl p-6 shadow-2xl">
+
+          {/* Language Selection */}
+          <div className="mb-5">
+            <p className="text-xs text-slate-400 mb-2 flex items-center gap-1">
+              <Globe className="w-3.5 h-3.5" /> AI किस भाषा में जवाब दे?
+            </p>
+            <div className="flex gap-2">
+              {LANGUAGES.map(lang => (
+                <button key={lang.id} onClick={() => setSelectedLang(lang.id)}
+                  className={`flex-1 py-2 px-1 rounded-xl text-xs font-semibold border transition-all ${
+                    selectedLang === lang.id
+                      ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                      : 'bg-[#0a0a0f] border-[#1a1a27] text-slate-500 hover:text-slate-300'
+                  }`}>
+                  <div>{lang.label}</div>
+                  <div className="text-[10px] font-normal opacity-70 mt-0.5">{lang.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Toggle */}
-          <div className="flex bg-[#0a0a0f] rounded-xl p-1 mb-6">
+          <div className="flex bg-[#0a0a0f] rounded-xl p-1 mb-5">
             {['Login', 'Sign Up'].map((tab, i) => (
               <button key={tab} onClick={() => { setIsLogin(i === 0); setError('') }}
                 className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${isLogin === (i === 0) ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
@@ -71,7 +102,7 @@ export default function AuthPage() {
 
           {/* Google Login */}
           <button onClick={handleGoogle} disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 bg-white hover:bg-gray-100 rounded-xl text-gray-800 font-semibold text-sm transition-all mb-4 disabled:opacity-50">
+            className="w-full flex items-center justify-center gap-3 py-3 bg-white hover:bg-gray-100 rounded-xl text-gray-800 font-semibold text-sm transition-all mb-4 disabled:opacity-50 shadow-md">
             {googleLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -113,19 +144,22 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>}
+          {error && (
+            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>
+          )}
 
           <button onClick={handleSubmit} disabled={loading}
-            className="w-full mt-5 py-3 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl text-white font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-violet-500/20">
+            className="w-full mt-5 py-3 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl text-white font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg">
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>{isLogin ? 'Login Karo' : 'Account Banao'} <ArrowRight className="w-4 h-4" /></>}
           </button>
 
-          <div className="mt-5 flex justify-around text-xs text-slate-600">
-            {['⚡ Groq AI', '🇮🇳 Hindi', '🔥 Fast', '🛡️ Secure'].map(f => <span key={f}>{f}</span>)}
-          </div>
+          <p className="text-center text-xs text-slate-600 mt-4">
+            By continuing, you agree to our{' '}
+            <a href="/privacy" className="text-violet-400 hover:underline">Privacy Policy</a>
+          </p>
         </div>
       </div>
     </div>
   )
-      }
+          }
     
